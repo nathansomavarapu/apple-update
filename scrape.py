@@ -15,8 +15,7 @@ CHANGES_URL = 'https://developer.apple.com/tutorials/data/diffs/documentation/de
 VERSIONS = ['latest_major', 'latest_minor']
 CHANGE_FILTERS = ['added']
 
-# SEND_TO = 'flamm.benjamin@gmail.com'
-SEND_TO = 'Somavarapun@gmail.com'
+SEND_TO = 'flamm.benjamin@gmail.com'
 
 class RestrictionScraper:
 
