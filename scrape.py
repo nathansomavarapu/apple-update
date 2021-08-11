@@ -1,5 +1,5 @@
 import requests
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from collections import defaultdict
 import unicodedata
 
@@ -7,11 +7,16 @@ import pickle
 import os
 import csv
 
+from notify import Notifier
+
 BASE_URL = 'https://developer.apple.com/tutorials/data/documentation/devicemanagement/restrictions.json'
 CHANGES_URL = 'https://developer.apple.com/tutorials/data/diffs/documentation/devicemanagement/restrictions.json'
 
 VERSIONS = ['latest_major', 'latest_minor']
 CHANGE_FILTERS = ['added']
+
+# SEND_TO = 'flamm.benjamin@gmail.com'
+SEND_TO = 'Somavarapun@gmail.com'
 
 class RestrictionScraper:
 
@@ -22,21 +27,21 @@ class RestrictionScraper:
         self.change_filters = set(change_filters)
         self.cache_pth = cache_pth
         
-        self.base_data = get_base_data(base_url)
+        self.base_data = self.get_base_data(base_url)
 
     def get_base_data(self, url: str) -> dict:
         return requests.get(url).json()
 
-    def get_changes(self) -> dict:
-        changes = defaultdict(lambda: defaultdict(list))
-        for v in self.versions:
-            data = requests.get(self.changes_url, params={'changes': v}).json()
-            data = data['doc://com.apple.documentation/documentation/devicemanagement/restrictions']['properties']
+    def get_changes(self, version: str) -> dict:
+        changes = {}
 
-            for k in data.keys():
-                change_type = data[k]['change']
-                if change_type in self.change_filters:
-                    changes[v][change_type].append(k)
+        data = requests.get(self.changes_url, params={'changes': version}).json()
+        data = data['doc://com.apple.documentation/documentation/devicemanagement/restrictions']['properties']
+
+        for k in data.keys():
+            change_type = data[k]['change']
+            if change_type in self.change_filters:
+                changes[k] = change_type
 
         return changes
     
@@ -44,25 +49,22 @@ class RestrictionScraper:
         minor_version = '-'.join(self.base_data['diffAvailability']['minor']['versions'])
         major_version = '-'.join(self.base_data['diffAvailability']['major']['versions'])
 
-        out = {'minor_version': minor_version, 'major_version': major_version}
+        out = {'latest_minor': minor_version, 'latest_major': major_version}
 
-        if os.path.exists(self.cache_pth):
-            with open(self.cache_pth, 'wb') as cache:
-                pickle.dump(out, cache)
-        else:
-            prev = None
+        changes = []
+        prev = defaultdict(lambda: None)
+        if found := os.path.exists(self.cache_pth):
             with open(self.cache_pth, 'rb') as cache:
                 prev = pickle.load(cache)
             
-            changes = []
-            for k in out:
-                if k not in prev:
-                    raise NotImplementedError()
-                if prev[k] != out[k]:
-                    changes.append((k, prev[k], out[k]))
-            
-            with open(self.cache_pth, 'wb') as cache:
-                pickle.dump(out, cache)
+        for k in out:
+            if found and k not in prev:
+                raise NotImplementedError()
+            if prev[k] != out[k]:
+                changes.append((k, str(prev[k]), str(out[k])))
+        
+        with open(self.cache_pth, 'wb') as cache:
+            pickle.dump(out, cache)
 
         return out, changes
 
@@ -73,43 +75,53 @@ class RestrictionScraper:
         
         for res in all_restrictions:
             if res['name'] in desc_queries:
-                text = res['content'][0]['inlineContent']
                 joined_text = []
-                for sub_text in text:
-                    text_key = 'text' if 'text' in sub_text else 'code'
-                    joined_text.append(sub_text[text_key])
+                if 'content' in res:
+                    text = res['content'][0]['inlineContent']
+                    for sub_text in text:
+                        text_key = 'text' if 'text' in sub_text else 'code'
+                        joined_text.append(sub_text[text_key])
 
                 joined_text = ''.join(joined_text)
                 joined_text = unicodedata.normalize("NFKD", joined_text)
 
-                curr_data = [res['name'], joined_text, res['type'][0]['text']]
+                var_type = res['type'][0]['text']
+
+                curr_data = [res['name'], joined_text, var_type]
                 out.append(curr_data)
 
         return out
     
-    def generate_body(self, updates: List[Tuple[str]]) -> str:
+    def generate_message(self, updates: List[Tuple[str]]) -> str:
         s = []
 
         for u in updates:
-            s.append('{} updated to {} from {} see attachment for what was added.')
+            s.append('{} updated from {} to {} see attachment for specifics.'.format(*u))
         
         return '\n'.join(s)
 
     def run(self):
-        self.version_dict, self.changes = self.check_versions()
+        version_dict, changed_versions = self.check_versions()
 
-        if self.changes:
-            changes = self.get_changes()
+        if len(changed_versions) != 0:
             
-            for v in VERSIONS:
-                restrictions = []
-                for c in CHANGE_FILTERS:
-                    restrictions.extend(changes[v][c])
+            change_csv_pths = []
+            for v,_,new_v in changed_versions:
 
-                with open(v + '.csv') as writefile:
+                changed_restrictions = self.get_changes(v)
+                curr_fp = v + '_' + new_v + '.csv'
+                change_csv_pths.append(curr_fp)
+
+                with open(curr_fp, 'w') as writefile:
                     csv_w = csv.writer(writefile)
-                    csv_w.writerow(['name', 'text', 'type'])
-                    csv_w.writerows(self.get_desc(restrictions))
+                    csv_w.writerow(['Name', 'Description', 'Type'])
+
+                    descriptions = self.get_desc(list(changed_restrictions.keys()))
+                    csv_w.writerows(descriptions)
+
+            m = self.generate_message(changed_versions)
+            n = Notifier()
+            n.send(SEND_TO, m, change_csv_pths)
 
 def main():
     rs = RestrictionScraper(BASE_URL, CHANGES_URL, VERSIONS, CHANGE_FILTERS)

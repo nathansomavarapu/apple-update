@@ -6,7 +6,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 import json
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
 
 class Notifier:
 
@@ -44,14 +44,15 @@ class Notifier:
 
         return part
 
-    def send(self, to: str, body: str, attach_fp: Optional[str] = None) -> None:
+    def send(self, to: str, body: str, attach_fp: Optional[List[str]] = []) -> None:
         message = self.initialize_mime()
         message.attach(MIMEText(body, "plain"))
         message["To"] = to
 
-        part = self.initialize_attachment(attach_fp)
-
-        message.attach(part)
+        for fp in attach_fp:
+            part = self.initialize_attachment(fp)
+            message.attach(part)
+        
         text = message.as_string()
 
         context = ssl.create_default_context()
