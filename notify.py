@@ -6,13 +6,13 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 import json
+from typing import Tuple, Optional
 
 class Notifier:
 
-    def __init__(self, receiver: str):
+    def __init__(self):
         self.subject = 'Updated Apple Restrictions'
         self.sender_email, self.password = self.read_key()
-        self.receiver_email = receiver
     
     def read_key(self, pth: str = 'key.json') -> Tuple[str, str]:
         user_pass = []
@@ -26,7 +26,6 @@ class Notifier:
     def initialize_mime(self) -> MIMEMultipart:
         message = MIMEMultipart()
         message["From"] = self.sender_email
-        message["To"] = self.receiver_email
         message["Subject"] = self.subject
 
         return message
@@ -45,9 +44,10 @@ class Notifier:
 
         return part
 
-    def send(self, to: str, message: str, attach_fp: Optional[str] = None) -> None:
-        message = initialize_mime()
-        message.attach(MIMEText(message, "plain"))
+    def send(self, to: str, body: str, attach_fp: Optional[str] = None) -> None:
+        message = self.initialize_mime()
+        message.attach(MIMEText(body, "plain"))
+        message["To"] = to
 
         part = self.initialize_attachment(attach_fp)
 
@@ -57,4 +57,4 @@ class Notifier:
         context = ssl.create_default_context()
         with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
             server.login(self.sender_email, self.password)
-            server.sendmail(self.sender_email, self.receiver_email, text)
+            server.sendmail(self.sender_email, to, text)
