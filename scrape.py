@@ -86,6 +86,14 @@ class RestrictionScraper:
                 out.append(curr_data)
 
         return out
+    
+    def generate_body(self, updates: List[Tuple[str]]) -> str:
+        s = []
+
+        for u in updates:
+            s.append('{} updated to {} from {} see attachment for what was added.')
+        
+        return '\n'.join(s)
 
     def run(self):
         self.version_dict, self.changes = self.check_versions()
