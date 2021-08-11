@@ -12,7 +12,7 @@ from notify import Notifier
 BASE_URL = 'https://developer.apple.com/tutorials/data/documentation/devicemanagement/restrictions.json'
 CHANGES_URL = 'https://developer.apple.com/tutorials/data/diffs/documentation/devicemanagement/restrictions.json'
 
-VERSIONS = ['latest_major', 'latest_minor']
+VERSIONS = ['latest_major', 'latest_minor', 'latest_beta']
 CHANGE_FILTERS = ['added']
 
 SEND_TO = 'flamm.benjamin@gmail.com'
@@ -45,10 +45,10 @@ class RestrictionScraper:
         return changes
     
     def check_versions(self) -> Tuple[dict, List]:
-        minor_version = '-'.join(self.base_data['diffAvailability']['minor']['versions'])
-        major_version = '-'.join(self.base_data['diffAvailability']['major']['versions'])
 
-        out = {'latest_minor': minor_version, 'latest_major': major_version}
+        out = {}
+        for v in self.versions:
+            out[v] = '-'.join(self.base_data['diffAvailability'][v.split('_')[-1]]['versions'])
 
         changes = []
         prev = defaultdict(lambda: None)
@@ -58,7 +58,7 @@ class RestrictionScraper:
             
         for k in out:
             if found and k not in prev:
-                raise NotImplementedError()
+                changes.append((k, 'None', str(out[k])))
             if prev[k] != out[k]:
                 changes.append((k, str(prev[k]), str(out[k])))
         
